@@ -7,6 +7,8 @@ namespace SteamDashET;
 
 internal sealed class SteamVrSession : IVrSession
 {
+    private readonly AppSettings settings;
+    private readonly GazeSmoothing smoothing = new();
     private CVRSystem system;
     private CVRInput input;
     private CVROverlay overlay;
@@ -17,8 +19,10 @@ internal sealed class SteamVrSession : IVrSession
     private bool initialized;
     private readonly Stopwatch clock = Stopwatch.StartNew();
 
-    internal SteamVrSession()
+    internal SteamVrSession(AppSettings settings)
     {
+        ArgumentNullException.ThrowIfNull(settings);
+        this.settings = settings;
         try
         {
             GazeInput.CheckAbi();
@@ -58,6 +62,10 @@ internal sealed class SteamVrSession : IVrSession
                 system.AcknowledgeQuit_Exiting();
                 throw new InvalidOperationException("SteamVR disconnected.");
             }
+            if ((EVREventType)ev.eventType is EVREventType.VREvent_ChaperoneUniverseHasChanged or
+                EVREventType.VREvent_ChaperoneDataHasChanged or EVREventType.VREvent_SeatedZeroPoseReset or
+                EVREventType.VREvent_StandingZeroPoseReset)
+                smoothing.Reset();
         }
         dot.PollEvents();
         if (!dot.Loaded && clock.Elapsed.TotalSeconds > 10)
@@ -72,6 +80,10 @@ internal sealed class SteamVrSession : IVrSession
             0, ref gaze, (uint)Marshal.SizeOf<VREyeTrackingData_t>());
         CheckInputConnection(read, "Reading eye tracking");
         bool gazeValid = GazeInput.TryDirection(gaze, out var direction) && sync == EVRInputError.None && read == EVRInputError.None;
+        if (headValid && gazeValid)
+            direction = smoothing.Apply(direction, clock.Elapsed.TotalSeconds, settings.SmoothingSeconds);
+        else
+            smoothing.Reset();
         bool show = dashboard && headValid && gazeValid && dot.Loaded;
         if (show) dot.Update(GazeInput.DotTransform(poses[0].mDeviceToAbsoluteTracking, gaze, direction));
         dot.Show(show);

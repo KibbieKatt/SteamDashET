@@ -25,6 +25,7 @@ The application starts connecting automatically when the window opens.
 - **Eye tracking** shows whether valid gaze data is arriving.
 - **Dashboard** shows the SteamVR connection and whether the dashboard is open.
 - **Gaze dot** reports whether SteamVR considers the overlay visible.
+- **Settings** (gear icon) opens a separate window for the smoothing period. The slider ranges from 0.00 to 1.00 seconds, and the numeric arrows adjust it in 0.01-second steps. Changes apply immediately and are saved between launches.
 - **Stop** removes the overlay and disconnects. **Start** reconnects.
 - Closing the window stops the worker, removes the overlay, and releases its OpenVR connection.
 
@@ -34,13 +35,21 @@ Connection and invalid-handle errors dispose the current session and trigger rec
 
 ## Current behavior
 
-The dot has a dark outline and sits one meter along the combined gaze ray in SteamVR Standing coordinates. It is visible only while the dashboard is open. Its depth is fixed; it does not yet intersect or align with individual dashboard panels.
+The dot has a dark outline and is visible while the SteamVR dashboard is open. It uses SteamVR eye tracking.
 
-This is a passive overlay: overlay input is disabled (`None`), the gaze action set uses priority `0`, and the application sends no clicks or cursor events. It uses SteamVR's gaze data directly, with no smoothing, additional head-rotation correction, or alternate data source.
+Smoothing defaults to 0.07 seconds; 0.00 disables it. The dot uses a time-weighted average of recent eye tracking directions, following the latest eye position. Longer periods reduce jitter and add delay. History resets when tracking is lost, the period changes, or the tracking reference changes. Settings are stored in `%LOCALAPPDATA%/SteamDashET/settings.json`.
+
+The overlay provides a gaze indicator. Clicking is not implemented yet.
+
+## Technical details
+
+The flat dot sits one meter along the combined gaze ray in SteamVR Standing coordinates. Its depth is fixed; it does not yet intersect or align with individual dashboard panels.
+
+Overlay input is disabled (`None`), the gaze action set uses priority `0`, and the application sends no clicks or cursor events.
 
 ## Project layout
 
 - `App/`: control window, OpenVR session, gaze input, dot rendering, and self-checks.
 - `vendor/openvr/`: bundled bindings, native library, license, and provenance.
 
-Self-checks cover gaze validation, placement, generated bindings, the solid texture, connection recovery, and cancellation using fake sessions.
+Self-checks cover gaze validation, placement, generated bindings, the solid texture, smoothing, settings persistence, connection recovery, and cancellation using fake sessions.

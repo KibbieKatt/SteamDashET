@@ -14,14 +14,18 @@ internal sealed class ControlWindow : Form
     private static readonly Color ReadyColor = Color.FromArgb(24, 112, 78);
     private static readonly Color GazeColor = Color.FromArgb(255, 70, 195);
 
-    private readonly VrController controller = new();
+    private readonly AppSettings settings = AppSettings.Load();
+    private readonly VrController controller;
     private readonly Label eyeStatus = CreateStatusLabel("Waiting to connect");
     private readonly Label dashboardStatus = CreateStatusLabel("Waiting to connect");
     private readonly Label detail = new();
     private readonly Label dotStatus = new();
     private readonly DotIndicator dotIndicator = new();
     private readonly Button toggle = new();
+    private readonly Button settingsButton = new();
+    private readonly ToolTip toolTip = new();
     private readonly System.Windows.Forms.Timer refreshTimer = new() { Interval = 200 };
+    private SettingsWindow? settingsWindow;
     private Task transitionTask = Task.CompletedTask;
     private bool transitioning;
     private bool closing;
@@ -31,6 +35,7 @@ internal sealed class ControlWindow : Form
 
     public ControlWindow()
     {
+        controller = new VrController(settings);
         Text = "SteamDashET";
         Name = "SteamDashETControlWindow";
         AccessibleName = "SteamDashET control window";
@@ -57,13 +62,35 @@ internal sealed class ControlWindow : Form
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
-        layout.Controls.Add(new Label
+        var header = new TableLayoutPanel
+        {
+            AutoSize = true,
+            Dock = DockStyle.Fill,
+            Margin = Padding.Empty,
+            ColumnCount = 2,
+            RowCount = 1
+        };
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        header.Controls.Add(new Label
         {
             Text = "SteamDashET",
             AutoSize = true,
             Font = new Font(Font.FontFamily, 18, FontStyle.Bold),
             Margin = new Padding(0, 0, 0, 3)
         }, 0, 0);
+        settingsButton.Text = "\u2699";
+        settingsButton.Name = "SettingsButton";
+        settingsButton.AccessibleName = "Settings";
+        settingsButton.Font = new Font("Segoe UI Symbol", 14);
+        settingsButton.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        settingsButton.Size = new Size(38, 36);
+        settingsButton.Margin = new Padding(12, 0, 0, 0);
+        settingsButton.UseVisualStyleBackColor = true;
+        settingsButton.Click += (_, _) => OpenSettings();
+        toolTip.SetToolTip(settingsButton, "Settings");
+        header.Controls.Add(settingsButton, 1, 0);
+        layout.Controls.Add(header, 0, 0);
         layout.Controls.Add(new Label
         {
             Text = "Eye tracking for your SteamVR dashboard",
@@ -176,6 +203,20 @@ internal sealed class ControlWindow : Form
         transitionTask = ChangeRunningStateAsync(start);
     }
 
+    private void OpenSettings()
+    {
+        if (closing) return;
+        if (settingsWindow is { IsDisposed: false })
+        {
+            settingsWindow.Activate();
+            return;
+        }
+
+        settingsWindow = new SettingsWindow(settings);
+        settingsWindow.FormClosed += (_, _) => settingsWindow = null;
+        settingsWindow.Show(this);
+    }
+
     private async Task ChangeRunningStateAsync(bool start)
     {
         transitioning = true;
@@ -210,6 +251,7 @@ internal sealed class ControlWindow : Form
         dotStatus.Text = status.DotVisible ? "Gaze dot visible" : "Gaze dot hidden";
         dotIndicator.DotColor = status.DotVisible ? GazeColor : Color.FromArgb(175, 183, 196);
         toggle.Enabled = !transitioning && !closing;
+        settingsButton.Enabled = !closing;
         toggle.Text = closing ? "Stopping…" : transitioning ? transitionText
             : status.IsRunning ? "Stop" : "Start";
     }
@@ -220,6 +262,7 @@ internal sealed class ControlWindow : Form
         e.Cancel = true;
         if (closing) return;
         closing = true;
+        settingsWindow?.Close();
         refreshTimer.Stop();
         RefreshStatus();
         try
@@ -242,7 +285,11 @@ internal sealed class ControlWindow : Form
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing) refreshTimer.Dispose();
+        if (disposing)
+        {
+            refreshTimer.Dispose();
+            toolTip.Dispose();
+        }
         base.Dispose(disposing);
     }
 

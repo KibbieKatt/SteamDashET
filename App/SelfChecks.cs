@@ -20,7 +20,7 @@ internal static class SelfChecks
         var head = new HmdMatrix34_t { m2 = 1, m5 = 1, m8 = -1, m3 = 20, m7 = 30, m11 = 40 };
         var transform = GazeInput.DotTransform(head, gaze, direction);
         Require(transform.m3 == 1 && transform.m7 == 2 && transform.m11 == 2 && transform.m2 == head.m2,
-            "Dot preserves world-space gaze under rotated headset");
+            "Dot placement uses gaze directly under a rotated headset");
         gaze.bTracked = false;
         Require(!GazeInput.TryDirection(gaze, out _), "Untracked gaze is rejected");
         gaze.bTracked = true;
@@ -47,7 +47,32 @@ internal static class SelfChecks
             if (Directory.Exists(temporary)) Directory.Delete(temporary);
         }
         ConnectionChecks();
+        SmoothingChecks.Run();
+        SettingsChecks();
         LifecycleChecks().GetAwaiter().GetResult();
+    }
+
+    private static void SettingsChecks()
+    {
+        string temporary = Path.Combine(Path.GetTempPath(), "SteamDashET-settings-check-" + Guid.NewGuid().ToString("N"));
+        string path = Path.Combine(temporary, "settings.json");
+        try
+        {
+            var settings = AppSettings.Load(path);
+            Require(settings.SmoothingSeconds == AppSettings.DefaultSmoothingSeconds, "Smoothing defaults to 0.07 seconds");
+            settings.SmoothingSeconds = 0.37;
+            settings.Save();
+            Require(AppSettings.Load(path).SmoothingSeconds == 0.37, "Smoothing period survives saving and loading");
+            File.WriteAllText(path, "{ invalid JSON");
+            Require(AppSettings.Load(path).SmoothingSeconds == AppSettings.DefaultSmoothingSeconds,
+                "Unreadable settings use the default without preventing startup");
+        }
+        finally
+        {
+            File.Delete(path);
+            File.Delete(path + ".tmp");
+            if (Directory.Exists(temporary)) Directory.Delete(temporary);
+        }
     }
 
     private static void ConnectionChecks()

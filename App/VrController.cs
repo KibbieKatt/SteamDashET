@@ -22,7 +22,7 @@ internal sealed class VrController
     private VrStatus status = VrStatus.Stopped;
     public VrStatus Status => Volatile.Read(ref status);
 
-    public VrController() : this(() => new SteamVrSession()) { }
+    public VrController(AppSettings settings) : this(() => new SteamVrSession(settings)) { }
     internal VrController(Func<IVrSession> createSession) => this.createSession = createSession;
 
     public async Task StartAsync()
