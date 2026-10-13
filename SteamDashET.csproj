@@ -11,6 +11,7 @@
     <RootNamespace>SteamDashET</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="Vortice.Direct3D11" Version="3.8.3" />
     <Compile Include="App/**/*.cs" />
     <Compile Include="vendor/openvr/openvr_api.cs" />
     <None Update="vendor/openvr/openvr_api.dll" Link="openvr_api.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />

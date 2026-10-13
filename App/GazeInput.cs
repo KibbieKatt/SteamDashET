@@ -25,14 +25,10 @@ internal static class GazeInput
 
     internal static bool Finite(Vector3 v) => float.IsFinite(v.X) && float.IsFinite(v.Y) && float.IsFinite(v.Z);
 
-    internal static HmdMatrix34_t DotTransform(HmdMatrix34_t head, VREyeTrackingData_t gaze, Vector3 direction)
-    {
-        // Gaze is already in Standing space. Use the HMD basis only to orient the flat dot.
-        head.m3 = gaze.vGazeOrigin.v0 + direction.X;
-        head.m7 = gaze.vGazeOrigin.v1 + direction.Y;
-        head.m11 = gaze.vGazeOrigin.v2 + direction.Z;
-        return head;
-    }
+    internal static bool Finite(HmdMatrix34_t m) =>
+        float.IsFinite(m.m0) && float.IsFinite(m.m1) && float.IsFinite(m.m2) && float.IsFinite(m.m3) &&
+        float.IsFinite(m.m4) && float.IsFinite(m.m5) && float.IsFinite(m.m6) && float.IsFinite(m.m7) &&
+        float.IsFinite(m.m8) && float.IsFinite(m.m9) && float.IsFinite(m.m10) && float.IsFinite(m.m11);
 
     internal static void CheckAbi()
     {

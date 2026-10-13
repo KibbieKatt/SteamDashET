@@ -13,6 +13,7 @@ internal sealed class SteamVrSession : IVrSession
     private CVRInput input;
     private CVROverlay overlay;
     private GazeDot dot;
+    private DashboardPanels panels;
     private ulong action;
     private VRActiveActionSet_t[] sets;
     private readonly TrackedDevicePose_t[] poses = new TrackedDevicePose_t[OpenVR.k_unMaxTrackedDeviceCount];
@@ -47,7 +48,8 @@ internal sealed class SteamVrSession : IVrSession
             Check(input.GetActionSetHandle(GazeInput.ActionSet, ref actionSet), "Gaze action set");
             Check(input.GetActionHandle(GazeInput.Action, ref action), "Gaze action");
             sets = new[] { new VRActiveActionSet_t { ulActionSet = actionSet, nPriority = 0 } };
-            dot = new GazeDot(overlay);
+            panels = new DashboardPanels(overlay);
+            dot = new GazeDot(overlay, system);
         }
         catch { Dispose(); throw; }
     }
@@ -55,8 +57,10 @@ internal sealed class SteamVrSession : IVrSession
     public VrStatus Poll(CancellationToken token)
     {
         VREvent_t ev = default;
-        while (system.PollNextEvent(ref ev, (uint)Marshal.SizeOf<VREvent_t>()))
+        for (int count = 0; count < 256 && !token.IsCancellationRequested &&
+            system.PollNextEvent(ref ev, (uint)Marshal.SizeOf<VREvent_t>()); count++)
         {
+            panels.ObserveEvent(ev);
             if ((EVREventType)ev.eventType == EVREventType.VREvent_Quit)
             {
                 system.AcknowledgeQuit_Exiting();
@@ -67,12 +71,10 @@ internal sealed class SteamVrSession : IVrSession
                 EVREventType.VREvent_StandingZeroPoseReset)
                 smoothing.Reset();
         }
-        dot.PollEvents();
-        if (!dot.Loaded && clock.Elapsed.TotalSeconds > 10)
-            throw new InvalidOperationException("SteamVR did not finish loading the gaze dot.");
         bool dashboard = overlay.IsDashboardVisible();
+        panels.Refresh(clock.Elapsed.TotalSeconds, dashboard, token);
         system.GetDeviceToAbsoluteTrackingPose(ETrackingUniverseOrigin.TrackingUniverseStanding, 0, poses);
-        bool headValid = poses[0].bDeviceIsConnected && poses[0].bPoseIsValid;
+        bool headValid = poses[0].bDeviceIsConnected && poses[0].bPoseIsValid && GazeInput.Finite(poses[0].mDeviceToAbsoluteTracking);
         var sync = input.UpdateActionState(sets, (uint)Marshal.SizeOf<VRActiveActionSet_t>());
         CheckInputConnection(sync, "Updating gaze actions");
         VREyeTrackingData_t gaze = default;
@@ -84,22 +86,25 @@ internal sealed class SteamVrSession : IVrSession
             direction = smoothing.Apply(direction, clock.Elapsed.TotalSeconds, settings.SmoothingSeconds);
         else
             smoothing.Reset();
-        bool show = dashboard && headValid && gazeValid && dot.Loaded;
-        if (show) dot.Update(GazeInput.DotTransform(poses[0].mDeviceToAbsoluteTracking, gaze, direction));
+        var origin = new System.Numerics.Vector3(gaze.vGazeOrigin.v0, gaze.vGazeOrigin.v1, gaze.vGazeOrigin.v2);
+        PanelHit hit = default;
+        bool panelHit = dashboard && headValid && gazeValid && panels.TryIntersect(origin, direction, out hit);
+        bool show = panelHit && dot.Update(origin, hit.Point, hit.Normal);
         dot.Show(show);
 
         string eye = gazeValid ? "Receiving gaze" : "No gaze data";
         string detail = !headValid ? "Waiting for headset tracking." :
             !gazeValid ? "Waiting for valid eye tracking." :
             !dashboard ? "Open the SteamVR dashboard to see the dot." :
-            !dot.Loaded ? "Loading the gaze dot…" : "Gaze dot active in the dashboard.";
+            !panelHit ? "No dashboard panel at your gaze. The dot is hidden." :
+            !show ? "Waiting for a usable dot view." : "Gaze dot placed on a dashboard panel.";
         if (sync != EVRInputError.None || read != EVRInputError.None)
         {
             eye = "Input unavailable";
             detail = $"SteamVR gaze input: sync {sync}, read {read}.";
         }
         var status = new VrStatus(true, eye, dashboard ? "Connected · Open" : "Connected · Closed",
-            detail, gazeValid, dashboard, dot.Visible);
+            detail, gazeValid, dashboard, dot.Visible, string.Join(Environment.NewLine, panels.DiscoveryWarnings));
         var wait = overlay.WaitFrameSync(20);
         if (NeedsFrameSyncFallback(wait)) token.WaitHandle.WaitOne(10);
         return status;

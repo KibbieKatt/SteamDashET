@@ -1,7 +1,8 @@
 namespace SteamDashET;
 
 internal sealed record VrStatus(bool IsRunning, string EyeTracking, string Dashboard, string Detail,
-    bool EyeTrackingReady = false, bool DashboardOpen = false, bool DotVisible = false)
+    bool EyeTrackingReady = false, bool DashboardOpen = false, bool DotVisible = false,
+    string DiscoveryWarning = "")
 {
     internal static VrStatus Stopped => new(false, "Stopped", "Disconnected", "Press Start to connect to SteamVR.");
 }

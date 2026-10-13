@@ -1,4 +1,4 @@
-using System.Runtime.InteropServices;
+using System.Numerics;
 using Valve.VR;
 
 namespace SteamDashET;
@@ -6,68 +6,53 @@ namespace SteamDashET;
 internal sealed class GazeDot : IDisposable
 {
     private readonly CVROverlay api;
+    private readonly byte[] image = DotImage.CreatePixels();
     private ulong handle;
-    private GCHandle pixels;
+    private OverlayTexture texture;
     private bool shown;
-    internal bool Loaded { get; private set; }
-    internal bool Visible => shown && api.IsOverlayVisible(handle);
+    internal bool Visible => shown && handle != 0 && api.IsOverlayVisible(handle);
 
-    internal GazeDot(CVROverlay api)
+    internal GazeDot(CVROverlay api, CVRSystem system)
     {
         this.api = api;
         try
         {
-            Check(api.CreateOverlay($"steamdash.et.{Environment.ProcessId}.gaze", "SteamDashET gaze", ref handle));
+            Check(api.CreateOverlay($"steamdash.et.{Environment.ProcessId}.gaze",
+                "SteamDashET gaze dot", ref handle));
             Check(api.SetOverlayInputMethod(handle, VROverlayInputMethod.None));
             Check(api.SetOverlayFlag(handle, VROverlayFlags.VisibleInDashboard, true));
             Check(api.SetOverlayFlag(handle, VROverlayFlags.NoBackside, true));
             Check(api.SetOverlaySortOrder(handle, uint.MaxValue));
-            Check(api.SetOverlayWidthInMeters(handle, 0.020f));
-            Check(api.SetOverlayAlpha(handle, 1));
-            // Upload once and retain the buffer through the asynchronous upload and overlay lifetime.
-            pixels = GCHandle.Alloc(MakePixels(), GCHandleType.Pinned);
-            Check(api.SetOverlayRaw(handle, pixels.AddrOfPinnedObject(), 96, 96, 4));
+            Check(api.SetOverlayAlpha(handle, DotImage.Alpha));
+            Check(api.SetOverlayWidthInMeters(handle, DotImage.PlaneWidth));
+            texture = new OverlayTexture(system, DotImage.Width, DotImage.Height);
+            Upload();
         }
         catch { Dispose(); throw; }
     }
 
-    internal void Update(HmdMatrix34_t transform) => Check(api.SetOverlayTransformAbsolute(handle,
-        ETrackingUniverseOrigin.TrackingUniverseStanding, ref transform));
+    internal bool Update(Vector3 origin, Vector3 center, Vector3 normal)
+    {
+        if (Vector3.Dot(normal, origin - center) < 0) normal = -normal;
+        if (!DotImage.TrySurfaceFrame(center, normal, out var frame)) return false;
+        Check(api.SetOverlayTransformAbsolute(handle, ETrackingUniverseOrigin.TrackingUniverseStanding, ref frame));
+        Upload();
+        return true;
+    }
+
+    private void Upload()
+    {
+        texture.Update(image);
+        var submitted = new Texture_t { handle = texture.Handle,
+            eType = ETextureType.DirectX, eColorSpace = EColorSpace.Gamma };
+        Check(api.SetOverlayTexture(handle, ref submitted));
+    }
 
     internal void Show(bool visible)
     {
         if (shown == visible) return;
         Check(visible ? api.ShowOverlay(handle) : api.HideOverlay(handle));
         shown = visible;
-    }
-
-    internal void PollEvents()
-    {
-        VREvent_t ev = default;
-        while (api.PollNextOverlayEvent(handle, ref ev, (uint)Marshal.SizeOf<VREvent_t>()))
-        {
-            if ((EVREventType)ev.eventType == EVREventType.VREvent_ImageLoaded) Loaded = true;
-            if ((EVREventType)ev.eventType == EVREventType.VREvent_ImageFailed)
-                throw new InvalidOperationException("SteamVR could not load the gaze dot.");
-        }
-    }
-
-    internal static byte[] MakePixels()
-    {
-        var bytes = new byte[96 * 96 * 4];
-        for (int y = 0; y < 96; y++)
-        for (int x = 0; x < 96; x++)
-        {
-            float radius = MathF.Sqrt((x - 47.5f) * (x - 47.5f) + (y - 47.5f) * (y - 47.5f));
-            if (radius > 43) continue;
-            int i = (y * 96 + x) * 4;
-            bool outline = radius > 38;
-            bytes[i] = outline ? (byte)12 : (byte)255;
-            bytes[i + 1] = outline ? (byte)12 : (byte)40;
-            bytes[i + 2] = outline ? (byte)12 : (byte)220;
-            bytes[i + 3] = 255;
-        }
-        return bytes;
     }
 
     private static void Check(EVROverlayError error)
@@ -82,10 +67,11 @@ internal sealed class GazeDot : IDisposable
             if (handle != 0)
             {
                 api.HideOverlay(handle);
+                api.ClearOverlayTexture(handle);
                 api.DestroyOverlay(handle);
                 handle = 0;
             }
         }
-        finally { if (pixels.IsAllocated) pixels.Free(); }
+        finally { texture?.Dispose(); texture = null; }
     }
 }

@@ -17,10 +17,6 @@ internal static class SelfChecks
         };
         Require(GazeInput.TryDirection(gaze, out var direction) && direction == -Vector3.UnitZ,
             "Combined gaze normalizes target minus origin");
-        var head = new HmdMatrix34_t { m2 = 1, m5 = 1, m8 = -1, m3 = 20, m7 = 30, m11 = 40 };
-        var transform = GazeInput.DotTransform(head, gaze, direction);
-        Require(transform.m3 == 1 && transform.m7 == 2 && transform.m11 == 2 && transform.m2 == head.m2,
-            "Dot placement uses gaze directly under a rotated headset");
         gaze.bTracked = false;
         Require(!GazeInput.TryDirection(gaze, out _), "Untracked gaze is rejected");
         gaze.bTracked = true;
@@ -28,9 +24,6 @@ internal static class SelfChecks
         Require(!GazeInput.TryDirection(gaze, out _), "Zero ray is rejected");
         gaze.vGazeTarget.v0 = float.NaN;
         Require(!GazeInput.TryDirection(gaze, out _), "Non-finite ray is rejected");
-        var pixels = GazeDot.MakePixels();
-        Require(pixels[3] == 0 && pixels[(48 * 96 + 48) * 4 + 3] == 255,
-            "Solid gaze dot has an opaque center and transparent background");
         string temporary = Path.Combine(Path.GetTempPath(), "SteamDashET-check-" + Guid.NewGuid().ToString("N"));
         try
         {
@@ -48,6 +41,9 @@ internal static class SelfChecks
         }
         ConnectionChecks();
         SmoothingChecks.Run();
+        PanelChecks.Run();
+        PanelDiscoveryChecks.Run();
+        LogDiscoveryChecks.Run();
         SettingsChecks();
         LifecycleChecks().GetAwaiter().GetResult();
     }

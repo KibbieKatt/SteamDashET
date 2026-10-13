@@ -12,13 +12,14 @@ internal sealed class ControlWindow : Form
 {
     private static readonly Color MutedColor = Color.FromArgb(94, 102, 116);
     private static readonly Color ReadyColor = Color.FromArgb(24, 112, 78);
-    private static readonly Color GazeColor = Color.FromArgb(255, 70, 195);
+    private static readonly Color GazeColor = DotImage.FillColor;
 
     private readonly AppSettings settings = AppSettings.Load();
     private readonly VrController controller;
     private readonly Label eyeStatus = CreateStatusLabel("Waiting to connect");
     private readonly Label dashboardStatus = CreateStatusLabel("Waiting to connect");
     private readonly Label detail = new();
+    private readonly Label discoveryWarning = new();
     private readonly Label dotStatus = new();
     private readonly DotIndicator dotIndicator = new();
     private readonly Button toggle = new();
@@ -119,13 +120,33 @@ internal sealed class ControlWindow : Form
         statuses.Controls.Add(dashboardStatus, 1, 1);
         layout.Controls.Add(statuses, 0, 2);
 
+        var details = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            Margin = new Padding(0, 16, 0, 12),
+            ColumnCount = 1,
+            RowCount = 2
+        };
+        details.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        details.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        details.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         detail.Dock = DockStyle.Fill;
-        detail.Margin = new Padding(0, 16, 0, 12);
+        detail.Margin = Padding.Empty;
         detail.ForeColor = MutedColor;
         detail.Text = "Connecting to SteamVR…";
         detail.AccessibleName = "Connection details";
         detail.UseMnemonic = false;
-        layout.Controls.Add(detail, 0, 3);
+        details.Controls.Add(detail, 0, 0);
+        discoveryWarning.AutoSize = true;
+        discoveryWarning.Dock = DockStyle.Fill;
+        discoveryWarning.Margin = new Padding(0, 8, 0, 0);
+        discoveryWarning.ForeColor = Color.FromArgb(146, 91, 16);
+        discoveryWarning.Text = "Limited panel discovery. Hover for details.";
+        discoveryWarning.AccessibleName = "Panel discovery warning";
+        discoveryWarning.UseMnemonic = false;
+        discoveryWarning.Visible = false;
+        details.Controls.Add(discoveryWarning, 0, 1);
+        layout.Controls.Add(details, 0, 3);
 
         var footer = new TableLayoutPanel
         {
@@ -248,6 +269,12 @@ internal sealed class ControlWindow : Form
         dashboardStatus.ForeColor = status.DashboardOpen ? ReadyColor : MutedColor;
         detail.Text = closing ? "Stopping gaze tracking and removing the dashboard dot…"
             : operationError ?? status.Detail;
+        discoveryWarning.Visible = !closing && status.DiscoveryWarning.Length > 0;
+        if (toolTip.GetToolTip(discoveryWarning) != status.DiscoveryWarning)
+        {
+            toolTip.SetToolTip(discoveryWarning, status.DiscoveryWarning);
+            discoveryWarning.AccessibleDescription = status.DiscoveryWarning;
+        }
         dotStatus.Text = status.DotVisible ? "Gaze dot visible" : "Gaze dot hidden";
         dotIndicator.DotColor = status.DotVisible ? GazeColor : Color.FromArgb(175, 183, 196);
         toggle.Enabled = !transitioning && !closing;
