@@ -12,6 +12,7 @@ internal sealed class SettingsWindow : Form
     private readonly AppSettings settings;
     private readonly TrackBar smoothingSlider = new();
     private readonly NumericUpDown smoothingValue = new();
+    private readonly ComboBox interpolationMethod = new();
     private readonly Label saveStatus = new();
     private bool synchronizing;
 
@@ -23,7 +24,7 @@ internal sealed class SettingsWindow : Form
         AccessibleName = "SteamDashET settings";
         AutoScaleDimensions = new SizeF(96, 96);
         AutoScaleMode = AutoScaleMode.Dpi;
-        ClientSize = new Size(450, 300);
+        ClientSize = new Size(450, 400);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
@@ -38,9 +39,11 @@ internal sealed class SettingsWindow : Form
             Dock = DockStyle.Fill,
             Padding = new Padding(24),
             ColumnCount = 1,
-            RowCount = 5
+            RowCount = 7
         };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -106,13 +109,28 @@ internal sealed class SettingsWindow : Form
         }, 2, 0);
         layout.Controls.Add(controls, 0, 2);
 
+        layout.Controls.Add(new Label
+        {
+            Text = "Calibration interpolation",
+            AutoSize = true,
+            Font = new Font(Font.FontFamily, 14, FontStyle.Bold),
+            Margin = new Padding(0, 22, 0, 8)
+        }, 0, 3);
+        interpolationMethod.Name = "CalibrationInterpolationMethod";
+        interpolationMethod.AccessibleName = "Calibration interpolation method";
+        interpolationMethod.DropDownStyle = ComboBoxStyle.DropDownList;
+        interpolationMethod.Dock = DockStyle.Top;
+        interpolationMethod.Margin = new Padding(0, 0, 0, 12);
+        interpolationMethod.Items.AddRange(["Linear triangles", "RBF (smooth fit)"]);
+        layout.Controls.Add(interpolationMethod, 0, 4);
+
         saveStatus.Name = "SettingsSaveStatus";
         saveStatus.AccessibleName = "Settings save status";
         saveStatus.Dock = DockStyle.Fill;
         saveStatus.Margin = Padding.Empty;
         saveStatus.ForeColor = Color.FromArgb(162, 45, 45);
         saveStatus.UseMnemonic = false;
-        layout.Controls.Add(saveStatus, 0, 3);
+        layout.Controls.Add(saveStatus, 0, 5);
 
         var close = new Button
         {
@@ -128,12 +146,13 @@ internal sealed class SettingsWindow : Form
         };
         close.Click += (_, _) => Close();
         CancelButton = close;
-        layout.Controls.Add(close, 0, 4);
+        layout.Controls.Add(close, 0, 6);
         Controls.Add(layout);
 
         SynchronizeControls();
         smoothingSlider.ValueChanged += (_, _) => ApplyValue(smoothingSlider.Value / 100.0);
         smoothingValue.ValueChanged += (_, _) => ApplyValue((double)smoothingValue.Value);
+        interpolationMethod.SelectedIndexChanged += (_, _) => ApplyInterpolationMethod();
     }
 
     private void ApplyValue(double seconds)
@@ -141,6 +160,21 @@ internal sealed class SettingsWindow : Form
         if (synchronizing) return;
         settings.SmoothingSeconds = seconds;
         SynchronizeControls();
+        SaveSettings();
+    }
+
+    private void ApplyInterpolationMethod()
+    {
+        if (synchronizing || interpolationMethod.SelectedIndex < 0) return;
+        settings.InterpolationMethod = interpolationMethod.SelectedIndex == 0
+            ? CalibrationInterpolationMethod.LinearTriangles
+            : CalibrationInterpolationMethod.SmoothRbf;
+        SynchronizeControls();
+        SaveSettings();
+    }
+
+    private void SaveSettings()
+    {
         try
         {
             settings.Save();
@@ -159,6 +193,7 @@ internal sealed class SettingsWindow : Form
         {
             smoothingSlider.Value = (int)Math.Round(settings.SmoothingSeconds * 100);
             smoothingValue.Value = (decimal)settings.SmoothingSeconds;
+            interpolationMethod.SelectedIndex = settings.InterpolationMethod == CalibrationInterpolationMethod.LinearTriangles ? 0 : 1;
         }
         finally
         {

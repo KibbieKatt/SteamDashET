@@ -42,6 +42,14 @@ internal static class SelfChecks
         ConnectionChecks();
         ClickChecks.Run();
         ControllerButtonChecks.Run();
+        CalibrationModelChecks.Run();
+        RbfInterpolationChecks.Run();
+        LinearTriangleCalibrationChecks.Run();
+        CalibrationMethodChecks.Run();
+        CalibrationLoadChecks.Run();
+        CalibrationGridImage.RunChecks(Require);
+        CalibrationGridOverlay.RunChecks(Require);
+        CalibrationRoutineChecks.Run();
         SmoothingChecks.Run();
         PanelChecks.Run();
         PanelDiscoveryChecks.Run();
@@ -58,11 +66,40 @@ internal static class SelfChecks
         {
             var settings = AppSettings.Load(path);
             Require(settings.SmoothingSeconds == AppSettings.DefaultSmoothingSeconds, "Smoothing defaults to 0.07 seconds");
+            Require(settings.InterpolationMethod == CalibrationInterpolationMethod.LinearTriangles,
+                "Calibration interpolation defaults to linear triangles");
             settings.SmoothingSeconds = 0.37;
             settings.Save();
             Require(AppSettings.Load(path).SmoothingSeconds == 0.37, "Smoothing period survives saving and loading");
+            settings.InterpolationMethod = CalibrationInterpolationMethod.LinearTriangles;
+            settings.Save();
+            var restored = AppSettings.Load(path);
+            using (var stored = JsonDocument.Parse(File.ReadAllText(path)))
+                Require(restored.InterpolationMethod == CalibrationInterpolationMethod.LinearTriangles &&
+                    restored.SmoothingSeconds == 0.37 &&
+                    stored.RootElement.GetProperty("InterpolationMethod").GetString() == "LinearTriangles",
+                    "The interpolation choice saves by stable name alongside the smoothing period");
+            settings.InterpolationMethod = CalibrationInterpolationMethod.SmoothRbf;
+            settings.Save();
+            Require(AppSettings.Load(path).InterpolationMethod == CalibrationInterpolationMethod.SmoothRbf &&
+                AppSettings.Load(path).SmoothingSeconds == 0.37,
+                "An explicitly saved RBF choice is preserved despite the triangle default");
+            foreach (string method in new[] { "\"UnknownMethod\"", "42", "null", "{}" })
+            {
+                File.WriteAllText(path, "{\"SmoothingSeconds\":0.18,\"InterpolationMethod\":" + method + "}");
+                var unknown = AppSettings.Load(path);
+                Require(unknown.InterpolationMethod == CalibrationInterpolationMethod.LinearTriangles &&
+                    unknown.SmoothingSeconds == 0.18,
+                    "An unsupported interpolation setting preserves smoothing and uses the default: " + method);
+            }
+            bool rejected = false;
+            try { settings.InterpolationMethod = (CalibrationInterpolationMethod)100; }
+            catch (ArgumentOutOfRangeException) { rejected = true; }
+            Require(rejected && settings.InterpolationMethod == CalibrationInterpolationMethod.SmoothRbf,
+                "Unsupported interpolation writes cannot replace the current setting");
             File.WriteAllText(path, "{ invalid JSON");
-            Require(AppSettings.Load(path).SmoothingSeconds == AppSettings.DefaultSmoothingSeconds,
+            Require(AppSettings.Load(path).SmoothingSeconds == AppSettings.DefaultSmoothingSeconds &&
+                AppSettings.Load(path).InterpolationMethod == CalibrationInterpolationMethod.LinearTriangles,
                 "Unreadable settings use the default without preventing startup");
         }
         finally

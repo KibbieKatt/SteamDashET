@@ -25,10 +25,11 @@ The application starts connecting automatically when the window opens.
 - **Eye tracking** shows whether valid gaze data is arriving.
 - **Dashboard** shows the SteamVR connection and whether the dashboard is open.
 - **Gaze dot** reports whether SteamVR considers the indicator visible.
+- **Calibration** shows the number of saved points. **Calibrate** opens the headset-fixed grid; **Clear** removes saved calibration when calibration is closed.
 - A **Limited panel discovery** warning appears when the UI logs cannot be read. Hover over it for details. Known panel keys remain available, and the warning clears when log access recovers.
-- **Settings** (gear icon) opens a separate window for the smoothing period. The slider ranges from 0.00 to 1.00 seconds, and the numeric arrows adjust it in 0.01-second steps. Changes apply immediately and are saved between launches.
-- **Stop** removes the overlay and disconnects. **Start** reconnects.
-- Closing the window stops the worker, removes the overlay, and releases its OpenVR connection.
+- **Settings** (gear icon) opens a separate window for the smoothing period and calibration interpolation method. The smoothing slider ranges from 0.00 to 1.00 seconds, and the numeric arrows adjust it in 0.01-second steps. Choose **Linear triangles** or **RBF (smooth fit)** for calibration. Changes apply immediately and are saved between launches.
+- **Stop** removes the overlays and disconnects. **Start** reconnects.
+- Closing the window stops the worker, removes the overlays, and releases its OpenVR connection.
 
 Start SteamVR separately. While running, the application retries a missing or disconnected runtime. Invalid gaze or headset tracking hides the dot until tracking returns. Only one copy of the control application runs at a time.
 
@@ -36,17 +37,43 @@ Gaze-input connection failures, errors from the application's own overlay, and f
 
 ## Current behavior
 
-The dot is a flat circle with a nebula purple fill (`#A878F0`), a dark gray border (`#292D32`), 30% opacity, an 8 mm outer radius, and a 2 mm border. It appears at the nearest valid hit on a visible dashboard panel, follows the panel surface, and sits 1 mm in front of it to avoid Z fighting. It appears only while the dashboard is open and your gaze hits a detected panel. A miss hides it immediately.
+The dot is a flat circle with a nebula purple fill (`#A878F0`), a dark gray border (`#292D32`), 30% opacity, an 8 mm outer radius, and a 2 mm border. During normal use it appears at the nearest valid hit on a visible dashboard panel, follows the panel surface, and sits 1 mm in front of it to avoid Z fighting. It appears only while the dashboard is open and your gaze hits a detected panel. A miss hides it immediately. During calibration it follows gaze on the grid's plane, including outside the grid, without requiring a dashboard panel hit.
 
 Desktop-game tabs (`valve.steam.desktopgame.<appid>`) are supported for any numeric app ID, including applications shown in their own dashboard tabs. Their cursor and pointer overlays remain excluded.
 
-Smoothing defaults to 0.07 seconds; 0.00 disables it. Panel intersection uses a time-weighted average of recent eye tracking directions and the latest eye position. Longer periods reduce jitter and add delay. History resets when tracking is lost, the period changes, or the tracking reference changes. Settings are stored in `%LOCALAPPDATA%/SteamDashET/settings.json`.
+Smoothing defaults to 0.07 seconds; 0.00 disables it. Panel intersection uses a time-weighted average of recent eye tracking directions and the latest eye position. Longer periods reduce jitter and add delay. History resets when tracking is lost, the period changes, the tracking reference changes, saved calibration changes, or the interpolation method changes. Settings are stored in `%LOCALAPPDATA%/SteamDashET/settings.json`.
 
 Press **A** while the dot is on a panel to submit a left click, or **B** to submit a right click. Both Index controllers are supported. Known Oculus Touch right-controller models are supported; their left X/Y buttons are excluded. Each button on each hand is tracked independently, and each press sends one complete click. Holding a button does not repeat or drag. Pressing while no dot is shown does nothing. Buttons held during startup, dashboard reopening, controller changes, or input recovery must be released before they can click.
 
 Button polling uses the public `IVRRenderModels.GetComponentStateForDevicePath` API and its `IsPressed` flag. It has been verified with Index controllers while the dashboard is open, even when ordinary action input is unavailable. Touch mappings are based on installed model definitions and have not been tested live. Component names depend on controller models; unsupported models or failed reads disable the affected click input while gaze rendering continues. Polling observes button states and does not replace SteamVR's own button behavior or require experimental input overrides.
 
 Clicking uses the public `IVROverlayView.PostOverlayEvent` route. Left and right clicks have been verified in the dashboard desktop view. Each panel decides how to handle those events; other panel types still need verification.
+
+## Calibration
+
+Choose **Calibrate** with eye tracking connected. All 108 targets appear in nine columns and twelve rows on a grid fixed to the headset, 1 meter away. Dots without a saved point are translucent gray; saved dots are green. An outline marks the selected dot and turns amber while collecting.
+
+- Look at a target to select the dot nearest your gaze.
+- Look at the selected dot and hold **A** to collect valid raw gaze samples. Release A to save that capture's average, replace the target's previous data, and immediately update the correction shown by the gaze dot. Selection stays locked during collection.
+- Tap **B** to clear the selected target. Hold B for one second to finish without clearing it. **Finish calibration** in the control window also exits.
+- Visit any targets in any order and repeat targets as needed. Saved points remain available when calibration is reopened.
+
+Calibration collects gaze before correction and smoothing. The visible gaze dot uses the current saved correction followed by the same smoothing used during normal operation. Opening or closing calibration does not change smoothing behavior. Saving or clearing a point resets its history so the updated correction is visible immediately. Normal dashboard clicks are suspended during calibration; held buttons must be released before dashboard clicking resumes. SteamVR's own controller behavior is still active.
+
+The selected interpolation method uses the same saved angular offsets:
+
+- **Linear triangles** is the default. It connects measured gaze averages into triangles and blends their corrections within each triangle. It passes through the saved averages; changes in correction rate can occur at triangle edges. Outside the calibrated region, it extends the correction interpolated at the closest boundary edge. With two points or collinear points, it interpolates along the closest segment. With one saved point, either method applies a uniform offset; with no saved points, gaze remains uncorrected.
+- **RBF (smooth fit)** uses Gaussian kernels with a 6° width and no regularization. It interpolates the saved averages within numerical precision, with smooth local variation between them. Corrections tend toward the average offset far from saved points, and their magnitude remains bounded by the observed calibration offsets.
+
+Switching methods keeps saved calibration intact. At the end of each capture, samples are weighted by their valid dwell time, with unusually distant readings reduced in influence. Untracked intervals contribute no dwell time. Only one averaged gaze angle and its expected target angle are retained per target. New saves contain these averaged points; raw sample history is discarded after the capture. No minimum number of populated targets is required.
+
+If two targets have exactly the same measured angles, both methods retain the target with the higher grid index for fitting. If distinct readings are too close for a reliable RBF calculation, loading or selecting RBF shows a fit warning and leaves gaze uncorrected while retaining the saved points. A failed new capture preserves the previous calibration. Select Linear triangles to repair saved points individually, then return to RBF, or clear calibration.
+
+Data is saved to `%LOCALAPPDATA%/SteamDashET/calibration.json`, matched to the headset's serial number, and loaded automatically between launches. Files contain twelve rows and nine columns, retaining one averaged point or an empty entry for each target. Each successful A release saves its averaged point immediately. Direction is corrected relative to the headset and returned to SteamVR Standing coordinates before smoothing; the tracked eye position is preserved. **Clear** restores uncorrected gaze without changing smoothing settings. Stopping or disconnecting discards an unfinished A hold while retaining saved data.
+
+If the calibration file cannot be read or contains invalid data, the control window shows a load warning and gaze remains uncorrected. The next successful capture or clear operation writes new calibration to the same file.
+
+The calibration grid uploads a new RGBA image with `SetOverlayRaw` when selection or saved point status changes. The application waits for its image-loading event before reusing the pinned upload buffer and publishes the latest requested state after completion.
 
 ## Technical details
 
@@ -68,7 +95,7 @@ The indicator's own overlay input is disabled (`None`). The gaze action set uses
 
 ## Project layout
 
-- `App/`: control window, OpenVR session, panel discovery, gaze input, dot rendering, and self-checks.
+- `App/`: control window, OpenVR session, panel discovery, gaze input, calibration, dot rendering, and self-checks.
 - `vendor/openvr/`: bundled bindings, native library, license, and provenance.
 
-Self-checks cover gaze validation and bindings, controller-component polling and identity changes, left/right click coordinates and event order, overlapping presses, held and missed presses, input recovery, panel filtering and hit geometry, bounded candidate refresh and lifecycle behavior, registered log paths and discovery recovery, flat dot colors and placement, smoothing, settings persistence, connection recovery, and cancellation using fake sessions.
+Self-checks cover gaze validation and bindings, controller-component polling and identity changes, left/right click coordinates and event order, overlapping presses, held and missed presses, input recovery, panel filtering and hit geometry, bounded candidate refresh and lifecycle behavior, registered log paths and discovery recovery, flat dot colors and placement, smoothing, settings persistence, calibration fitting and persistence, target selection and collection, connection recovery, and cancellation using fake sessions.

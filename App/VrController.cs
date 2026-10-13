@@ -22,9 +22,18 @@ internal sealed class VrController
     private Task worker;
     private VrStatus status = VrStatus.Stopped;
     public VrStatus Status => Volatile.Read(ref status);
+    internal CalibrationService Calibration { get; }
 
-    public VrController(AppSettings settings) : this(() => new SteamVrSession(settings)) { }
-    internal VrController(Func<IVrSession> createSession) => this.createSession = createSession;
+    public VrController(AppSettings settings)
+    {
+        Calibration = new CalibrationService(interpolationMethod: settings.InterpolationMethod);
+        createSession = () => new SteamVrSession(settings, Calibration);
+    }
+    internal VrController(Func<IVrSession> createSession)
+    {
+        this.createSession = createSession;
+        Calibration = new CalibrationService(CalibrationProfile.Empty(""), _ => { });
+    }
 
     public async Task StartAsync()
     {
@@ -54,6 +63,7 @@ internal sealed class VrController
                 cancellation = null;
             }
             Volatile.Write(ref status, VrStatus.Stopped);
+            Calibration.Finish();
         }
         finally { lifecycle.Release(); }
     }

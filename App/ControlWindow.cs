@@ -18,6 +18,9 @@ internal sealed class ControlWindow : Form
     private readonly VrController controller;
     private readonly Label eyeStatus = CreateStatusLabel("Waiting to connect");
     private readonly Label dashboardStatus = CreateStatusLabel("Waiting to connect");
+    private readonly Label calibrationStatus = CreateStatusLabel("No saved points");
+    private readonly Button calibrate = new();
+    private readonly Button clearCalibration = new();
     private readonly Label detail = new();
     private readonly Label discoveryWarning = new();
     private readonly Label dotStatus = new();
@@ -42,8 +45,8 @@ internal sealed class ControlWindow : Form
         AccessibleName = "SteamDashET control window";
         AutoScaleDimensions = new SizeF(96, 96);
         AutoScaleMode = AutoScaleMode.Dpi;
-        ClientSize = new Size(530, 350);
-        MinimumSize = new Size(490, 375);
+        ClientSize = new Size(560, 580);
+        MinimumSize = new Size(560, 610);
         StartPosition = FormStartPosition.CenterScreen;
         BackColor = Color.FromArgb(246, 248, 251);
         ForeColor = Color.FromArgb(30, 37, 49);
@@ -54,9 +57,10 @@ internal sealed class ControlWindow : Form
             Dock = DockStyle.Fill,
             Padding = new Padding(24),
             ColumnCount = 1,
-            RowCount = 5
+            RowCount = 6
         };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -108,17 +112,54 @@ internal sealed class ControlWindow : Form
             Padding = new Padding(16, 12, 16, 12),
             Margin = Padding.Empty,
             ColumnCount = 2,
-            RowCount = 2
+            RowCount = 3
         };
         statuses.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 124));
         statuses.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        statuses.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         statuses.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         statuses.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         statuses.Controls.Add(CreateCaption("Eye tracking"), 0, 0);
         statuses.Controls.Add(eyeStatus, 1, 0);
         statuses.Controls.Add(CreateCaption("Dashboard"), 0, 1);
         statuses.Controls.Add(dashboardStatus, 1, 1);
+        statuses.Controls.Add(CreateCaption("Calibration"), 0, 2);
+        statuses.Controls.Add(calibrationStatus, 1, 2);
         layout.Controls.Add(statuses, 0, 2);
+
+        var calibrationControls = new FlowLayoutPanel
+        {
+            AutoSize = true, Dock = DockStyle.Fill, WrapContents = true,
+            Margin = new Padding(0, 12, 0, 0)
+        };
+        calibrate.Text = "Calibrate";
+        calibrate.Name = "CalibrateButton";
+        calibrate.AccessibleName = "Start or finish gaze calibration";
+        calibrate.AutoSize = true;
+        calibrate.Padding = new Padding(8, 3, 8, 3);
+        calibrate.UseVisualStyleBackColor = true;
+        calibrate.Click += (_, _) =>
+        {
+            operationError = null;
+            if (controller.Calibration.Snapshot.Active) controller.Calibration.Finish();
+            else controller.Calibration.Begin();
+            RefreshStatus();
+        };
+        clearCalibration.Text = "Clear calibration";
+        clearCalibration.Name = "ClearCalibrationButton";
+        clearCalibration.AccessibleName = "Clear saved gaze calibration";
+        clearCalibration.AutoSize = true;
+        clearCalibration.Padding = new Padding(8, 3, 8, 3);
+        clearCalibration.UseVisualStyleBackColor = true;
+        clearCalibration.Click += (_, _) =>
+        {
+            try { controller.Calibration.Clear(); operationError = null; }
+            catch (Exception exception) { operationError = "Could not clear calibration: " + exception.Message; }
+            RefreshStatus();
+        };
+        calibrationControls.Controls.Add(calibrate);
+        calibrationControls.Controls.Add(clearCalibration);
+        layout.Controls.Add(calibrationControls, 0, 3);
 
         var details = new TableLayoutPanel
         {
@@ -146,7 +187,7 @@ internal sealed class ControlWindow : Form
         discoveryWarning.UseMnemonic = false;
         discoveryWarning.Visible = false;
         details.Controls.Add(discoveryWarning, 0, 1);
-        layout.Controls.Add(details, 0, 3);
+        layout.Controls.Add(details, 0, 4);
 
         var footer = new TableLayoutPanel
         {
@@ -184,7 +225,7 @@ internal sealed class ControlWindow : Form
         toggle.UseVisualStyleBackColor = true;
         toggle.Click += (_, _) => BeginTransition(!controller.Status.IsRunning);
         footer.Controls.Add(toggle, 1, 0);
-        layout.Controls.Add(footer, 0, 4);
+        layout.Controls.Add(footer, 0, 5);
         Controls.Add(layout);
 
         refreshTimer.Tick += (_, _) => RefreshStatus();
@@ -263,12 +304,23 @@ internal sealed class ControlWindow : Form
     private void RefreshStatus()
     {
         VrStatus status = controller.Status;
+        CalibrationSnapshot calibration = controller.Calibration.Snapshot;
+        calibrationStatus.Text = calibration.Status;
+        calibrationStatus.ForeColor = calibration.Warning.Length > 0 ? Color.FromArgb(146, 91, 16)
+            : calibration.PopulatedTargets > 0 ? ReadyColor : MutedColor;
+        toolTip.SetToolTip(calibrationStatus, calibration.Warning);
+        calibrate.Text = calibration.Active ? "Finish calibration" : "Calibrate";
+        calibrate.Enabled = !closing && !transitioning && (calibration.Active || status.EyeTrackingReady);
+        clearCalibration.Visible = calibration.PopulatedTargets > 0 || calibration.Warning.Length > 0;
+        clearCalibration.Enabled = !closing && !transitioning && !calibration.Active;
         eyeStatus.Text = status.EyeTracking;
         eyeStatus.ForeColor = status.EyeTrackingReady ? ReadyColor : MutedColor;
         dashboardStatus.Text = status.Dashboard;
         dashboardStatus.ForeColor = status.DashboardOpen ? ReadyColor : MutedColor;
         detail.Text = closing ? "Stopping gaze tracking and removing the dashboard dot…"
-            : operationError ?? status.Detail;
+            : operationError ?? (calibration.Error.Length > 0 ? calibration.Error
+                : calibration.Warning.Length > 0 ? calibration.Warning + "\nA new capture or Clear can replace this calibration."
+                : status.Detail);
         discoveryWarning.Visible = !closing && status.DiscoveryWarning.Length > 0;
         if (toolTip.GetToolTip(discoveryWarning) != status.DiscoveryWarning)
         {

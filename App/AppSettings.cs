@@ -5,8 +5,10 @@ namespace SteamDashET;
 internal sealed class AppSettings
 {
     internal const double DefaultSmoothingSeconds = 0.07;
+    internal const CalibrationInterpolationMethod DefaultInterpolationMethod = CalibrationInterpolationMethod.LinearTriangles;
     private readonly string path;
     private int smoothingHundredths = (int)(DefaultSmoothingSeconds * 100);
+    private int interpolationMethod = (int)DefaultInterpolationMethod;
 
     internal AppSettings(string path = null)
     {
@@ -26,6 +28,17 @@ internal sealed class AppSettings
         }
     }
 
+    public CalibrationInterpolationMethod InterpolationMethod
+    {
+        get => (CalibrationInterpolationMethod)Volatile.Read(ref interpolationMethod);
+        set
+        {
+            if (!Enum.IsDefined(value))
+                throw new ArgumentOutOfRangeException(nameof(value), "Choose a supported calibration interpolation method.");
+            Volatile.Write(ref interpolationMethod, (int)value);
+        }
+    }
+
     internal static AppSettings Load(string path = null)
     {
         var settings = new AppSettings(path);
@@ -35,8 +48,17 @@ internal sealed class AppSettings
             {
                 using var file = JsonDocument.Parse(File.ReadAllText(settings.path));
                 if (file.RootElement.TryGetProperty(nameof(SmoothingSeconds), out var smoothing) &&
+                    smoothing.ValueKind == JsonValueKind.Number &&
                     smoothing.TryGetDouble(out double seconds) && double.IsFinite(seconds))
                     settings.SmoothingSeconds = Math.Clamp(seconds, 0, 1);
+                if (file.RootElement.TryGetProperty(nameof(InterpolationMethod), out var method) &&
+                    method.ValueKind == JsonValueKind.String)
+                    settings.InterpolationMethod = method.GetString() switch
+                    {
+                        nameof(CalibrationInterpolationMethod.LinearTriangles) => CalibrationInterpolationMethod.LinearTriangles,
+                        nameof(CalibrationInterpolationMethod.SmoothRbf) => CalibrationInterpolationMethod.SmoothRbf,
+                        _ => DefaultInterpolationMethod
+                    };
             }
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException or InvalidOperationException)
@@ -51,7 +73,11 @@ internal sealed class AppSettings
         string directory = Path.GetDirectoryName(Path.GetFullPath(path));
         Directory.CreateDirectory(directory);
         string temporary = path + ".tmp";
-        File.WriteAllText(temporary, JsonSerializer.Serialize(new { SmoothingSeconds },
+        File.WriteAllText(temporary, JsonSerializer.Serialize(new
+        {
+            SmoothingSeconds,
+            InterpolationMethod = InterpolationMethod.ToString()
+        },
             new JsonSerializerOptions { WriteIndented = true }));
         File.Move(temporary, path, overwrite: true);
     }

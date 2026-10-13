@@ -10,6 +10,7 @@ internal sealed class GazeDot : IDisposable
     private ulong handle;
     private OverlayTexture texture;
     private bool shown;
+    private bool headRelative;
     internal bool Visible => shown && handle != 0 && api.IsOverlayVisible(handle);
 
     internal GazeDot(CVROverlay api, CVRSystem system)
@@ -33,9 +34,28 @@ internal sealed class GazeDot : IDisposable
 
     internal bool Update(Vector3 origin, Vector3 center, Vector3 normal)
     {
+        if (headRelative)
+        {
+            Check(api.SetOverlayWidthInMeters(handle, DotImage.PlaneWidth));
+            headRelative = false;
+        }
         if (Vector3.Dot(normal, origin - center) < 0) normal = -normal;
         if (!DotImage.TrySurfaceFrame(center, normal, out var frame)) return false;
         Check(api.SetOverlayTransformAbsolute(handle, ETrackingUniverseOrigin.TrackingUniverseStanding, ref frame));
+        Upload();
+        return true;
+    }
+
+    internal bool UpdateHeadRelative(Vector3 origin, Vector3 center)
+    {
+        if (!CalibrationSpace.TryIndicatorFrame(origin, center, out var frame)) return false;
+        if (!headRelative)
+        {
+            // Keep a consistent angular size at the calibration grid's distance.
+            Check(api.SetOverlayWidthInMeters(handle, DotImage.PlaneWidth * CalibrationGridOverlay.GridPlaneDistance));
+            headRelative = true;
+        }
+        Check(api.SetOverlayTransformTrackedDeviceRelative(handle, OpenVR.k_unTrackedDeviceIndex_Hmd, ref frame));
         Upload();
         return true;
     }
