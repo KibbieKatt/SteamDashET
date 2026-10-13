@@ -40,6 +40,8 @@ internal static class SelfChecks
             if (Directory.Exists(temporary)) Directory.Delete(temporary);
         }
         ConnectionChecks();
+        ClickChecks.Run();
+        ControllerButtonChecks.Run();
         SmoothingChecks.Run();
         PanelChecks.Run();
         PanelDiscoveryChecks.Run();

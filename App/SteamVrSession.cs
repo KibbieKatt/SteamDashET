@@ -14,6 +14,8 @@ internal sealed class SteamVrSession : IVrSession
     private CVROverlay overlay;
     private GazeDot dot;
     private DashboardPanels panels;
+    private GazeClick clicks;
+    private ControllerButtonInput controllerButtons;
     private ulong action;
     private VRActiveActionSet_t[] sets;
     private readonly TrackedDevicePose_t[] poses = new TrackedDevicePose_t[OpenVR.k_unMaxTrackedDeviceCount];
@@ -48,8 +50,11 @@ internal sealed class SteamVrSession : IVrSession
             Check(input.GetActionSetHandle(GazeInput.ActionSet, ref actionSet), "Gaze action set");
             Check(input.GetActionHandle(GazeInput.Action, ref action), "Gaze action");
             sets = new[] { new VRActiveActionSet_t { ulActionSet = actionSet, nPriority = 0 } };
+            controllerButtons = new ControllerButtonInput(system, input, OpenVR.RenderModels);
             panels = new DashboardPanels(overlay);
             dot = new GazeDot(overlay, system);
+            clicks = new GazeClick(overlay, OpenVR.OverlayView ??
+                throw new InvalidOperationException("SteamVR overlay input is unavailable."));
         }
         catch { Dispose(); throw; }
     }
@@ -61,6 +66,11 @@ internal sealed class SteamVrSession : IVrSession
             system.PollNextEvent(ref ev, (uint)Marshal.SizeOf<VREvent_t>()); count++)
         {
             panels.ObserveEvent(ev);
+            if ((EVREventType)ev.eventType == EVREventType.VREvent_TrackedDeviceRoleChanged)
+                controllerButtons.Invalidate();
+            else if ((EVREventType)ev.eventType is EVREventType.VREvent_TrackedDeviceActivated or
+                EVREventType.VREvent_TrackedDeviceDeactivated or EVREventType.VREvent_TrackedDeviceUpdated)
+                controllerButtons.Invalidate(ev.trackedDeviceIndex);
             if ((EVREventType)ev.eventType == EVREventType.VREvent_Quit)
             {
                 system.AcknowledgeQuit_Exiting();
@@ -77,6 +87,7 @@ internal sealed class SteamVrSession : IVrSession
         bool headValid = poses[0].bDeviceIsConnected && poses[0].bPoseIsValid && GazeInput.Finite(poses[0].mDeviceToAbsoluteTracking);
         var sync = input.UpdateActionState(sets, (uint)Marshal.SizeOf<VRActiveActionSet_t>());
         CheckInputConnection(sync, "Updating gaze actions");
+        var buttons = controllerButtons.Read();
         VREyeTrackingData_t gaze = default;
         var read = input.GetEyeTrackingDataRelativeToNow(action, ETrackingUniverseOrigin.TrackingUniverseStanding,
             0, ref gaze, (uint)Marshal.SizeOf<VREyeTrackingData_t>());
@@ -91,6 +102,7 @@ internal sealed class SteamVrSession : IVrSession
         bool panelHit = dashboard && headValid && gazeValid && panels.TryIntersect(origin, direction, out hit);
         bool show = panelHit && dot.Update(origin, hit.Point, hit.Normal);
         dot.Show(show);
+        clicks.Update(buttons, dashboard && !token.IsCancellationRequested, show, hit);
 
         string eye = gazeValid ? "Receiving gaze" : "No gaze data";
         string detail = !headValid ? "Waiting for headset tracking." :

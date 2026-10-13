@@ -1,6 +1,6 @@
 # SteamDashET
 
-A small Windows application that reads eye tracking from SteamVR and places a purple dot where your gaze intersects its dashboard panels, including desktop views and menus.
+A small Windows application that reads eye tracking from SteamVR, places a purple dot where your gaze intersects its dashboard panels, and lets you left click with controller A or right click with B.
 
 ## Build and run
 
@@ -42,7 +42,11 @@ Desktop-game tabs (`valve.steam.desktopgame.<appid>`) are supported for any nume
 
 Smoothing defaults to 0.07 seconds; 0.00 disables it. Panel intersection uses a time-weighted average of recent eye tracking directions and the latest eye position. Longer periods reduce jitter and add delay. History resets when tracking is lost, the period changes, or the tracking reference changes. Settings are stored in `%LOCALAPPDATA%/SteamDashET/settings.json`.
 
-The overlay provides a gaze indicator. Clicking is not implemented yet.
+Press **A** while the dot is on a panel to submit a left click, or **B** to submit a right click. Both Index controllers are supported. Known Oculus Touch right-controller models are supported; their left X/Y buttons are excluded. Each button on each hand is tracked independently, and each press sends one complete click. Holding a button does not repeat or drag. Pressing while no dot is shown does nothing. Buttons held during startup, dashboard reopening, controller changes, or input recovery must be released before they can click.
+
+Button polling uses the public `IVRRenderModels.GetComponentStateForDevicePath` API and its `IsPressed` flag. It has been verified with Index controllers while the dashboard is open, even when ordinary action input is unavailable. Touch mappings are based on installed model definitions and have not been tested live. Component names depend on controller models; unsupported models or failed reads disable the affected click input while gaze rendering continues. Polling observes button states and does not replace SteamVR's own button behavior or require experimental input overrides.
+
+Clicking uses the public `IVROverlayView.PostOverlayEvent` route. Left and right clicks have been verified in the dashboard desktop view. Each panel decides how to handle those events; other panel types still need verification.
 
 ## Technical details
 
@@ -60,11 +64,11 @@ One static circle image is uploaded to a persistent Direct3D 11 texture on Steam
 
 The indicator requests the maximum `SetOverlaySortOrder`. This is a rendering order request, and does not guarantee visibility above every dashboard element. [A reported SteamVR 2.17 regression](https://steamcommunity.com/app/250820/discussions/3/563659290304476304/) causes overlapping overlays to clip despite this ordering and also affects transparency. This matches the observed clipping on 2.17.10, but has not been isolated with a runtime version comparison here. OpenVR exposes no separate depth-test override to bypass it. The 1 mm surface offset avoids a coplanar depth tie; it does not override SteamVR's depth handling.
 
-Overlay input is disabled (`None`), the gaze action set uses priority `0`, and the application sends no clicks or cursor events.
+The indicator's own overlay input is disabled (`None`). The gaze action set uses priority `0`; controller button polling needs no action bindings. Clicks use successful hit UVs multiplied by the destination's `GetOverlayMouseScale`, then post mouse move, the selected mouse-button down, and its matching mouse-button up to that overlay. A mouse-up is attempted even if posting the down event throws. No button remains held between frames.
 
 ## Project layout
 
 - `App/`: control window, OpenVR session, panel discovery, gaze input, dot rendering, and self-checks.
 - `vendor/openvr/`: bundled bindings, native library, license, and provenance.
 
-Self-checks cover gaze validation, panel filtering and hit geometry, bounded candidate refresh and lifecycle behavior, registered log paths and discovery recovery, flat dot colors and placement, generated bindings, smoothing, settings persistence, connection recovery, and cancellation using fake sessions.
+Self-checks cover gaze validation and bindings, controller-component polling and identity changes, left/right click coordinates and event order, overlapping presses, held and missed presses, input recovery, panel filtering and hit geometry, bounded candidate refresh and lifecycle behavior, registered log paths and discovery recovery, flat dot colors and placement, smoothing, settings persistence, connection recovery, and cancellation using fake sessions.

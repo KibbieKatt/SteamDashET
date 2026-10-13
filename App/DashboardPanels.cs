@@ -7,7 +7,7 @@ using Valve.VR;
 namespace SteamDashET;
 
 internal readonly record struct PanelHit(string Key, ulong Handle, Vector3 Point, Vector3 Normal,
-    float Distance);
+    float Distance, Vector2 UV = default);
 
 // All instance methods run on the OpenVR worker. Keys are hints until FindOverlay resolves them.
 internal sealed class DashboardPanels
@@ -170,7 +170,8 @@ internal sealed class DashboardPanels
                 !IsValidHit(origin, unitDirection, result))
                 continue;
             var candidate = new PanelHit(key, panel.Handle, Vector(result.vPoint),
-                Vector3.Normalize(Vector(result.vNormal)), result.fDistance);
+                Vector3.Normalize(Vector(result.vNormal)), result.fDistance,
+                new Vector2(result.vUVs.v0, result.vUVs.v1));
             hits.Add((candidate, panel.Sort));
             nearestDistance = MathF.Min(nearestDistance, candidate.Distance);
         }

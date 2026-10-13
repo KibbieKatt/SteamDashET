@@ -91,6 +91,18 @@ internal static class PanelDiscoveryChecks
             Directory.Delete(directory);
         }
         EventRetryChecks();
+        NativeUvCheck();
+    }
+
+    private static void NativeUvCheck()
+    {
+        using var native = new FakeOverlay();
+        native.Add("system.desktop.1", 1);
+        var panels = EventOnlyPanels(native);
+        panels.Refresh(0, true, CancellationToken.None);
+        Require(panels.TryIntersect(Vector3.Zero, -Vector3.UnitZ, out var hit) &&
+            hit.Handle == 1 && hit.UV == new Vector2(0.25f, 0.75f),
+            "The selected panel preserves native UV coordinates for clicking");
     }
 
     private static void EventRetryChecks()
@@ -384,7 +396,7 @@ internal static class PanelDiscoveryChecks
                     v2 = ray.vSource.v2 + ray.vDirection.v2
                 },
                 vNormal = new HmdVector3_t { v0 = -ray.vDirection.v0, v1 = -ray.vDirection.v1, v2 = -ray.vDirection.v2 },
-                vUVs = new HmdVector2_t { v0 = 0.5f, v1 = 0.5f },
+                vUVs = new HmdVector2_t { v0 = 0.25f, v1 = 0.75f },
                 fDistance = 1
             };
             return true;
