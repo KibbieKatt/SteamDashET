@@ -4,7 +4,7 @@ A small Windows application that reads eye tracking from SteamVR, places a purpl
 
 ## Build and run
 
-Requires Windows x64, the .NET 10 SDK to build, SteamVR, and an eye-tracking provider that exposes OpenVR gaze input. Running a built copy requires the .NET 10 Windows Desktop Runtime. OpenVR SDK 2.15.6 bindings and its native library are bundled under `vendor/openvr`.
+Requires Windows x64, the .NET 10 SDK to build, SteamVR, and an eye-tracking provider that exposes OpenVR gaze input. OpenVR SDK 2.15.6 bindings and its native library are bundled under `vendor/openvr`.
 
 From the project root:
 
@@ -14,9 +14,22 @@ pwsh -File .\Build.ps1
 
 # Build, run the checks, and open the control window.
 pwsh -File .\Run.ps1
+
+# Build, run the checks, and publish a self-contained executable.
+pwsh -File .\BuildPublish.ps1
 ```
 
-You can also open `bin/Release/net10.0-windows/SteamDashET.exe` directly after building. Keep its accompanying files together. The application creates its gaze action manifest and bindings automatically in `%LOCALAPPDATA%\SteamDashET\runtime-input`, alongside its settings and calibration data. The application folder does not need write access.
+Both build workflows use optimized Release compilation:
+
+- `Build.ps1` creates the ordinary build in `bin/Release/net10.0-windows/` and runs its self-checks. This copy requires the .NET 10 Windows Desktop Runtime; keep its accompanying files together.
+- `Run.ps1` calls `Build.ps1`, then opens that ordinary build. You can also launch its `SteamDashET.exe` directly after building.
+- `BuildPublish.ps1` calls `Build.ps1`, then publishes to `bin/Release/net10.0-windows/win-x64/publish/` and runs the published executable's self-checks. Distribute only this folder's `SteamDashET.exe`.
+
+The published executable includes the .NET runtime, managed dependencies, and native libraries, including OpenVR. It needs no installed .NET runtime or separate application DLLs. Debugging symbols are embedded in the executable; no separate PDB is needed. Trimming and AOT compilation are disabled. Native libraries extract under `%TEMP%\.net` at runtime. SteamVR and an eye-tracking provider are still required.
+
+Required third-party license notices are embedded in the executable and available through **Settings → Licenses**. These include OpenVR, Vortice, SharpGen, and the .NET runtime selected for the build, including its third-party notices. No separate license or provenance files are needed with the published executable; OpenVR source provenance remains in the repository.
+
+The application creates its gaze action manifest and bindings automatically in `%LOCALAPPDATA%\SteamDashET\runtime-input`, alongside its settings and calibration data. Both builds use the same saved data. The application folder does not need write access.
 
 ## Control window
 
@@ -28,6 +41,7 @@ The application starts connecting automatically when the window opens.
 - **Calibration** shows the number of saved points. **Calibrate** opens the headset-fixed grid; **Clear** removes saved calibration when calibration is closed.
 - A **Limited panel discovery** warning appears when the UI logs cannot be read. Hover over it for details. Known panel keys remain available, and the warning clears when log access recovers.
 - **Settings** (gear icon) opens a separate window for the smoothing period and calibration interpolation method. The smoothing slider ranges from 0.00 to 1.00 seconds, and the numeric arrows adjust it in 0.01-second steps. Choose **Linear triangles** or **RBF (smooth fit)** for calibration. Changes apply immediately and are saved between launches.
+- **Licenses** in settings opens a resizable window containing the embedded notices. The text can be scrolled, selected, and copied. Settings and licenses remain accessible when SteamVR is disconnected.
 - **Stop** removes the overlays and disconnects. **Start** reconnects.
 - Closing the window stops the worker, removes the overlays, and releases its OpenVR connection.
 

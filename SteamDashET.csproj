@@ -15,7 +15,31 @@
     <Compile Include="App/**/*.cs" />
     <Compile Include="vendor/openvr/openvr_api.cs" />
     <None Update="vendor/openvr/openvr_api.dll" Link="openvr_api.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-    <None Update="vendor/openvr/LICENSE" Link="OPENVR-LICENSE.txt" CopyToOutputDirectory="PreserveNewest" />
-    <None Update="vendor/openvr/provenance.json" Link="openvr-provenance.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="vendor/openvr/LICENSE;vendor/openvr/provenance.json" CopyToOutputDirectory="Never" CopyToPublishDirectory="Never" />
+    <EmbeddedResource Include="vendor/openvr/LICENSE" LogicalName="SteamDashET.Notices.OpenVR" WithCulture="false" />
+    <EmbeddedResource Include="licenses/*.txt" LogicalName="SteamDashET.Notices.%(Filename)" WithCulture="false" />
   </ItemGroup>
+  <!-- Embed notices from the runtime packs actually being redistributed, including after SDK updates. -->
+  <Target Name="EmbedRuntimeNotices" BeforeTargets="AssignTargetPaths" DependsOnTargets="ResolveFrameworkReferences;ResolveRuntimePackAssets"
+          Condition="'$(SelfContained)' == 'true' and '$(DesignTimeBuild)' != 'true'">
+    <PropertyGroup>
+      <_BundledRuntimePackageIds>;@(RuntimePackAsset->'%(NuGetPackageId)'->Distinct());</_BundledRuntimePackageIds>
+    </PropertyGroup>
+    <ItemGroup>
+      <_BundledRuntimePack Include="@(ResolvedRuntimePack)" Condition="$(_BundledRuntimePackageIds.Contains(';%(ResolvedRuntimePack.NuGetPackageId);'))" />
+    </ItemGroup>
+    <Error Condition="'@(_BundledRuntimePack)' == ''" Text="Self-contained builds must resolve runtime packs before embedding their notices." />
+    <Error Condition="!Exists('%(_BundledRuntimePack.PackageDirectory)/LICENSE.TXT') and !Exists('%(_BundledRuntimePack.PackageDirectory)/LICENSE')"
+           Text="Missing license for runtime pack %(_BundledRuntimePack.NuGetPackageId)." />
+    <Error Condition="'%(_BundledRuntimePack.FrameworkName)' == 'Microsoft.NETCore.App' and !Exists('%(_BundledRuntimePack.PackageDirectory)/THIRD-PARTY-NOTICES.TXT')"
+           Text="Missing third-party notices for the bundled .NET runtime." />
+    <ItemGroup>
+      <EmbeddedResource Include="%(_BundledRuntimePack.PackageDirectory)/LICENSE.TXT" Condition="Exists('%(_BundledRuntimePack.PackageDirectory)/LICENSE.TXT')"
+                        LogicalName="SteamDashET.Notices.%(_BundledRuntimePack.NuGetPackageId).LICENSE" WithCulture="false" />
+      <EmbeddedResource Include="%(_BundledRuntimePack.PackageDirectory)/LICENSE" Condition="!Exists('%(_BundledRuntimePack.PackageDirectory)/LICENSE.TXT') and Exists('%(_BundledRuntimePack.PackageDirectory)/LICENSE')"
+                        LogicalName="SteamDashET.Notices.%(_BundledRuntimePack.NuGetPackageId).LICENSE" WithCulture="false" />
+      <EmbeddedResource Include="%(_BundledRuntimePack.PackageDirectory)/THIRD-PARTY-NOTICES.TXT" Condition="Exists('%(_BundledRuntimePack.PackageDirectory)/THIRD-PARTY-NOTICES.TXT')"
+                        LogicalName="SteamDashET.Notices.%(_BundledRuntimePack.NuGetPackageId).THIRD-PARTY-NOTICES" WithCulture="false" />
+    </ItemGroup>
+  </Target>
 </Project>

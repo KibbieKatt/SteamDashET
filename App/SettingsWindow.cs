@@ -132,6 +132,36 @@ internal sealed class SettingsWindow : Form
         saveStatus.UseMnemonic = false;
         layout.Controls.Add(saveStatus, 0, 5);
 
+        var buttons = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            AutoSize = true,
+            Margin = Padding.Empty,
+            ColumnCount = 2,
+            RowCount = 1
+        };
+        buttons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        buttons.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+
+        var licenses = new Button
+        {
+            Text = "Licenses",
+            Name = "OpenLicensesButton",
+            AccessibleName = "View third-party licenses",
+            AutoSize = true,
+            MinimumSize = new Size(92, 36),
+            Padding = new Padding(12, 4, 12, 4),
+            Anchor = AnchorStyles.Left,
+            Margin = Padding.Empty,
+            UseVisualStyleBackColor = true
+        };
+        licenses.Click += (_, _) =>
+        {
+            using var window = new LicensesWindow();
+            window.ShowDialog(this);
+        };
+        buttons.Controls.Add(licenses, 0, 0);
+
         var close = new Button
         {
             Text = "Close",
@@ -146,7 +176,8 @@ internal sealed class SettingsWindow : Form
         };
         close.Click += (_, _) => Close();
         CancelButton = close;
-        layout.Controls.Add(close, 0, 6);
+        buttons.Controls.Add(close, 1, 0);
+        layout.Controls.Add(buttons, 0, 6);
         Controls.Add(layout);
 
         SynchronizeControls();
