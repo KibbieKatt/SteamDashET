@@ -16,7 +16,7 @@ pwsh -File .\Build.ps1
 pwsh -File .\Run.ps1
 ```
 
-You can also open `bin/Release/net10.0-windows/SteamDashET.exe` directly after building. Keep its accompanying files together. The application creates its gaze action manifest and bindings in `runtime-input` beside the executable, so that directory must be writable.
+You can also open `bin/Release/net10.0-windows/SteamDashET.exe` directly after building. Keep its accompanying files together. The application creates its gaze action manifest and bindings automatically in `%LOCALAPPDATA%\SteamDashET\runtime-input`, alongside its settings and calibration data. The application folder does not need write access.
 
 ## Control window
 

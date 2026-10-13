@@ -55,8 +55,9 @@ internal sealed class SteamVrSession : IVrSession
             var typeError = ETrackedPropertyError.TrackedProp_Success;
             var type = new StringBuilder(1024);
             system.GetStringTrackedDeviceProperty(0, ETrackedDeviceProperty.Prop_ControllerType_String, type, 1024, ref typeError);
-            // SteamVR reads these files in its own process, so use the shared application directory.
-            string manifest = GazeInput.WriteManifest(Path.Combine(AppContext.BaseDirectory, "runtime-input"),
+            // Keep generated input files in user app data, where SteamVR can read them.
+            string manifest = GazeInput.WriteManifest(Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SteamDashET", "runtime-input"),
                 typeError == ETrackedPropertyError.TrackedProp_Success ? type.ToString() : "");
             Check(input.SetActionManifestPath(manifest), "Gaze bindings");
             ulong actionSet = 0;
