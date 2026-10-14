@@ -1,5 +1,7 @@
 # SteamDashET
 
+> **AI assistance:** This started as an experimental proof of concept and a toy, so I used AI assistance more than typical for something I would release. Other people seemed interested in it, so I decided to share it. [How AI was used](#how-ai-was-used) describes the assistant's contributions.
+
 A small Windows application that reads eye tracking from SteamVR, places a purple dot where your gaze intersects its dashboard panels, and lets you left click with controller A or right click with B.
 
 ## Build and run
@@ -113,3 +115,20 @@ The indicator's own overlay input is disabled (`None`). The gaze action set uses
 - `vendor/openvr/`: bundled bindings, native library, license, and provenance.
 
 Self-checks cover gaze validation and bindings, controller-component polling and identity changes, left/right click coordinates and event order, overlapping presses, held and missed presses, input recovery, panel filtering and hit geometry, bounded candidate refresh and lifecycle behavior, registered log paths and discovery recovery, flat dot colors and placement, smoothing, settings persistence, calibration fitting and persistence, target selection and collection, connection recovery, and cancellation using fake sessions.
+
+## How AI was used
+
+- Technical research, feasibility checks, and implementation proposals.
+- Writing and revising code.
+- Creating diagnostic tools and analyzing results.
+- Code reviews, automated checks, and bug fixes.
+- Build tooling, packaging, and documentation.
+
+**The maintainer handled:**
+
+- Setting goals, requirements, and priorities.
+- Choosing features, behavior, and visual design.
+- Providing specific implementation direction, setting constraints, and choosing among proposed approaches.
+- Testing with real hardware and reporting results.
+- Reviewing changes and directing revisions.
+- Deciding when the results were acceptable.
