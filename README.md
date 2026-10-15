@@ -2,7 +2,28 @@
 
 > **AI assistance:** This started as an experimental proof of concept and a toy, so I used AI assistance more than typical for something I would release. Other people seemed interested in it, so I decided to share it. [How AI was used](#how-ai-was-used) describes the assistant's contributions.
 
-A small Windows application that reads eye tracking from SteamVR, places a purple dot where your gaze intersects its dashboard panels, and lets you left click with controller A or right click with B.
+SteamDashET is a Windows application that lets you use eye tracking to interact with the SteamVR dashboard. It turns your gaze into a pointer, with clicks controlled by the buttons on your VR controller. You can use it to navigate the dashboard and work with desktop views while wearing your headset.
+
+SteamDashET reads eye tracking from SteamVR through OpenVR. Bigscreen Beyond users can supply this data by enabling eye tracking and the DFR recipient in the Beyond Utility. Other providers may work if they expose compatible OpenVR gaze input, but haven't been tested here.
+
+A note on accuracy: it wasn't that good for me, and the gaze dot often falls just to the side of buttons even after the extra dense calibration grid. Don't expect to easily use small buttons. As mentioned above, this was made as a toy proof of concept, so I'm just sharing it here in case it helps anyone else get started on a similar project.
+
+## Quick start
+
+* Start `SteamDashET.exe`, SteamVR, and the Bigscreen Beyond Utility in any order.
+* In the Beyond Utility, enable **eye tracking** and enable **DFR** as a recipient.
+* **Calibrate your gaze in the Beyond Utility first.**
+* Then use SteamDashET's calibration below to correct any remaining offset.
+* With the purple gaze dot visible, left click with A, right click with B
+
+### SteamDashET calibration
+
+1. Open the SteamVR dashboard and click **Calibrate** in the SteamDashET window.
+2. Look at a calibration dot to select it. Hold **A** while looking at the dot to collect your average gaze, then release **A** to save and apply the correction.
+3. Repeat for as few or as many dots as you need, focusing on areas where the gaze indicator is off.
+4. Hold **B** for one second to exit calibration.
+
+> **Pro Tip:** If your gaze is too far off to select the dot you're looking at, look slightly away until that dot is selected. Hold **A** to lock the selection, then look back at the dot while keeping **A** held. Spend most of the capture looking at the dot before releasing **A**, so the average reflects your intended gaze. The correction should bring the indicator closer to alignment, making the dot easier to select next time. You can capture that dot again to replace the initial average with a better one. This is a little annoying, but using the controller stick to flip through 108 dots is very tedious, so it seemed like a good tradeoff.
 
 ## Build and run
 
@@ -23,9 +44,9 @@ pwsh -File .\BuildPublish.ps1
 
 Both build workflows use optimized Release compilation:
 
-- `Build.ps1` creates the ordinary build in `bin/Release/net10.0-windows/` and runs its self-checks. This copy requires the .NET 10 Windows Desktop Runtime; keep its accompanying files together.
-- `Run.ps1` calls `Build.ps1`, then opens that ordinary build. You can also launch its `SteamDashET.exe` directly after building.
-- `BuildPublish.ps1` calls `Build.ps1`, then publishes to `bin/Release/net10.0-windows/win-x64/publish/` and runs the published executable's self-checks. Distribute only this folder's `SteamDashET.exe`.
+* `Build.ps1` creates the ordinary build in `bin/Release/net10.0-windows/` and runs its self-checks. This copy requires the .NET 10 Windows Desktop Runtime; keep its accompanying files together.
+* `Run.ps1` calls `Build.ps1`, then opens that ordinary build. You can also launch its `SteamDashET.exe` directly after building.
+* `BuildPublish.ps1` calls `Build.ps1`, then publishes to `bin/Release/net10.0-windows/win-x64/publish/` and runs the published executable's self-checks. Distribute only this folder's `SteamDashET.exe`.
 
 The published executable includes the .NET runtime, managed dependencies, and native libraries, including OpenVR. It needs no installed .NET runtime or separate application DLLs. Debugging symbols are embedded in the executable; no separate PDB is needed. Trimming and AOT compilation are disabled. Native libraries extract under `%TEMP%\.net` at runtime. SteamVR and an eye-tracking provider are still required.
 
@@ -37,15 +58,15 @@ The application creates its gaze action manifest and bindings automatically in `
 
 The application starts connecting automatically when the window opens.
 
-- **Eye tracking** shows whether valid gaze data is arriving.
-- **Dashboard** shows the SteamVR connection and whether the dashboard is open.
-- **Gaze dot** reports whether SteamVR considers the indicator visible.
-- **Calibration** shows the number of saved points. **Calibrate** opens the headset-fixed grid; **Clear** removes saved calibration when calibration is closed.
-- A **Limited panel discovery** warning appears when the UI logs cannot be read. Hover over it for details. Known panel keys remain available, and the warning clears when log access recovers.
-- **Settings** (gear icon) opens a separate window for the smoothing period and calibration interpolation method. The smoothing slider ranges from 0.00 to 1.00 seconds, and the numeric arrows adjust it in 0.01-second steps. Choose **Linear triangles** or **RBF (smooth fit)** for calibration. Changes apply immediately and are saved between launches.
-- **Licenses** in settings opens a resizable window containing the embedded notices. The text can be scrolled, selected, and copied. Settings and licenses remain accessible when SteamVR is disconnected.
-- **Stop** removes the overlays and disconnects. **Start** reconnects.
-- Closing the window stops the worker, removes the overlays, and releases its OpenVR connection.
+* **Eye tracking** shows whether valid gaze data is arriving.
+* **Dashboard** shows the SteamVR connection and whether the dashboard is open.
+* **Gaze dot** reports whether SteamVR considers the indicator visible.
+* **Calibration** shows the number of saved points. **Calibrate** opens the headset-fixed grid; **Clear** removes saved calibration when calibration is closed.
+* A **Limited panel discovery** warning appears when the UI logs cannot be read. Hover over it for details. Known panel keys remain available, and the warning clears when log access recovers.
+* **Settings** (gear icon) opens a separate window for the smoothing period and calibration interpolation method. The smoothing slider ranges from 0.00 to 1.00 seconds, and the numeric arrows adjust it in 0.01-second steps. Choose **Linear triangles** or **RBF (smooth fit)** for calibration. Changes apply immediately and are saved between launches.
+* **Licenses** in settings opens a resizable window containing the embedded notices. The text can be scrolled, selected, and copied. Settings and licenses remain accessible when SteamVR is disconnected.
+* **Stop** removes the overlays and disconnects. **Start** reconnects.
+* Closing the window stops the worker, removes the overlays, and releases its OpenVR connection.
 
 Start SteamVR separately. While running, the application retries a missing or disconnected runtime. Invalid gaze or headset tracking hides the dot until tracking returns. Only one copy of the control application runs at a time.
 
@@ -69,17 +90,17 @@ Clicking uses the public `IVROverlayView.PostOverlayEvent` route. Left and right
 
 Choose **Calibrate** with eye tracking connected. All 108 targets appear in nine columns and twelve rows on a grid fixed to the headset, 1 meter away. Dots without a saved point are translucent gray; saved dots are green. An outline marks the selected dot and turns amber while collecting.
 
-- Look at a target to select the dot nearest your gaze.
-- Look at the selected dot and hold **A** to collect valid raw gaze samples. Release A to save that capture's average, replace the target's previous data, and immediately update the correction shown by the gaze dot. Selection stays locked during collection.
-- Tap **B** to clear the selected target. Hold B for one second to finish without clearing it. **Finish calibration** in the control window also exits.
-- Visit any targets in any order and repeat targets as needed. Saved points remain available when calibration is reopened.
+* Look at a target to select the dot nearest your gaze.
+* Look at the selected dot and hold **A** to collect valid raw gaze samples. Release A to save that capture's average, replace the target's previous data, and immediately update the correction shown by the gaze dot. Selection stays locked during collection.
+* Tap **B** to clear the selected target. Hold B for one second to finish without clearing it. **Finish calibration** in the control window also exits.
+* Visit any targets in any order and repeat targets as needed. Saved points remain available when calibration is reopened.
 
 Calibration collects gaze before correction and smoothing. The visible gaze dot uses the current saved correction followed by the same smoothing used during normal operation. Opening or closing calibration does not change smoothing behavior. Saving or clearing a point resets its history so the updated correction is visible immediately. Normal dashboard clicks are suspended during calibration; held buttons must be released before dashboard clicking resumes. SteamVR's own controller behavior is still active.
 
 The selected interpolation method uses the same saved angular offsets:
 
-- **Linear triangles** is the default. It connects measured gaze averages into triangles and blends their corrections within each triangle. It passes through the saved averages; changes in correction rate can occur at triangle edges. Outside the calibrated region, it extends the correction interpolated at the closest boundary edge. With two points or collinear points, it interpolates along the closest segment. With one saved point, either method applies a uniform offset; with no saved points, gaze remains uncorrected.
-- **RBF (smooth fit)** uses Gaussian kernels with a 6° width and no regularization. It interpolates the saved averages within numerical precision, with smooth local variation between them. Corrections tend toward the average offset far from saved points, and their magnitude remains bounded by the observed calibration offsets.
+* **Linear triangles** is the default. It connects measured gaze averages into triangles and blends their corrections within each triangle. It passes through the saved averages; changes in correction rate can occur at triangle edges. Outside the calibrated region, it extends the correction interpolated at the closest boundary edge. With two points or collinear points, it interpolates along the closest segment. With one saved point, either method applies a uniform offset; with no saved points, gaze remains uncorrected.
+* **RBF (smooth fit)** uses Gaussian kernels with a 6° width and no regularization. It interpolates the saved averages within numerical precision, with smooth local variation between them. Corrections tend toward the average offset far from saved points, and their magnitude remains bounded by the observed calibration offsets.
 
 Switching methods keeps saved calibration intact. At the end of each capture, samples are weighted by their valid dwell time, with unusually distant readings reduced in influence. Untracked intervals contribute no dwell time. Only one averaged gaze angle and its expected target angle are retained per target. New saves contain these averaged points; raw sample history is discarded after the capture. No minimum number of populated targets is required.
 
@@ -111,24 +132,24 @@ The indicator's own overlay input is disabled (`None`). The gaze action set uses
 
 ## Project layout
 
-- `App/`: control window, OpenVR session, panel discovery, gaze input, calibration, dot rendering, and self-checks.
-- `vendor/openvr/`: bundled bindings, native library, license, and provenance.
+* `App/`: control window, OpenVR session, panel discovery, gaze input, calibration, dot rendering, and self-checks.
+* `vendor/openvr/`: bundled bindings, native library, license, and provenance.
 
 Self-checks cover gaze validation and bindings, controller-component polling and identity changes, left/right click coordinates and event order, overlapping presses, held and missed presses, input recovery, panel filtering and hit geometry, bounded candidate refresh and lifecycle behavior, registered log paths and discovery recovery, flat dot colors and placement, smoothing, settings persistence, calibration fitting and persistence, target selection and collection, connection recovery, and cancellation using fake sessions.
 
 ## How AI was used
 
-- Technical research, feasibility checks, and implementation proposals.
-- Writing and revising code.
-- Creating diagnostic tools and analyzing results.
-- Code reviews, automated checks, and bug fixes.
-- Build tooling, packaging, and documentation.
+* Technical research, feasibility checks, and implementation proposals.
+* Writing and revising code.
+* Creating diagnostic tools and analyzing results.
+* Code reviews, automated checks, and bug fixes.
+* Build tooling, packaging, and documentation.
 
 **The maintainer handled:**
 
-- Setting goals, requirements, and priorities.
-- Choosing features, behavior, and visual design.
-- Providing specific implementation direction, setting constraints, and choosing among proposed approaches.
-- Testing with real hardware and reporting results.
-- Reviewing changes and directing revisions.
-- Deciding when the results were acceptable.
+* Setting goals, requirements, and priorities.
+* Choosing features, behavior, and visual design.
+* Providing specific implementation direction, setting constraints, and choosing among proposed approaches.
+* Testing with real hardware and reporting results.
+* Reviewing changes and directing revisions.
+* Deciding when the results were acceptable.
